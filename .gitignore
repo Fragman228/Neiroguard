@@ -1,0 +1,10 @@
+venv
+./venv
+./__pycache__
+__pycache__
+./models
+models
+./best
+./best50.pt
+./best_guns.pt
+./best50.pt
