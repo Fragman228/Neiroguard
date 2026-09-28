@@ -1,9 +1,19 @@
 {
-	"cams": [
-		
-		{
-      		"id": 1,
-      		"type": "usb"
-        }
-	]
+  "cams": [
+    {
+      "id": 1,
+      "type": "ip",
+      "ip": "rtsp://admin:swatyla_bob@192.168.1.65:554/Streaming/Channels/101"
+    },
+    {
+      "id": 2,
+      "type": "ip",
+      "ip": "rtsp://admin:swatyla_bob@192.168.1.66:554/Streaming/Channels/101"
+    },
+    {
+      "id": 3,
+      "type": "ip",
+      "ip": "rtsp://admin:swatyla_bob@192.168.1.67:554/Streaming/Channels/101"
+    }
+  ]
 }

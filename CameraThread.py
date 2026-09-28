@@ -50,9 +50,6 @@ class CameraThread(QThread):
 
     def stop(self):
         self._running = False
-        try:
-            self.camera.release()
-        except Exception:
-            pass
         self.quit()
         self.wait()
+        self.camera.release()

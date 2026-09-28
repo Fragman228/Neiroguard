@@ -8,17 +8,22 @@ import torch
 from ultralytics import YOLO
 from PIL import Image, ImageDraw, ImageFont
 
-from PyQt6.QtCore import QThread, pyqtSignal, QUrl
+from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QImage
 import pygame
 
 class SoundManager:
     def __init__(self):
-        pygame.mixer.init()
-        self.alarm = pygame.mixer.Sound("warning.mp3")
-        pass
+        self.alarm = None
+        try:
+            pygame.mixer.init()
+            self.alarm = pygame.mixer.Sound(os.path.join(os.path.dirname(__file__), "warning.mp3"))
+        except pygame.error:
+            # Detection remains available on machines without an audio device.
+            pass
+
     def play_alarm(self):
-        if not pygame.mixer.get_busy():
+        if self.alarm is not None and not pygame.mixer.get_busy():
             self.alarm.play()
 
 
@@ -29,12 +34,13 @@ class DetectionThread(QThread):
     def __init__(
         self,
         camera_thread,
-        model_path="best_old_50.pt",
+        model_path=None,
+        model=None,
         parent=None,
         device="cuda:0",
         default_conf=0.5,
 
-        # Оптимизация под GTX 1660
+        # Настройки инференса
         imgsz=640,
         infer_fps=10,
         iou=0.45,
@@ -48,6 +54,7 @@ class DetectionThread(QThread):
         super().__init__(parent)
 
         self.camera_thread = camera_thread
+        self._camera_lock = Lock()
         self._running = True
 
         self.imgsz = int(imgsz)
@@ -67,7 +74,12 @@ class DetectionThread(QThread):
             pass
 
         # Выбор устройства
-        if str(device).startswith("cuda") and torch.cuda.is_available():
+        if str(device).startswith("cuda"):
+            if not torch.cuda.is_available():
+                raise RuntimeError(
+                    "CUDA недоступна. Проверьте драйвер NVIDIA и CUDA-сборку PyTorch "
+                    "(.venv/bin/python test.py). Для проверки без GPU: NEIROGUARD_DEVICE=cpu."
+                )
             self.device = device
             print(device)
             self.is_cuda = True
@@ -82,18 +94,17 @@ class DetectionThread(QThread):
                 torch.backends.cudnn.allow_tf32 = True
             except Exception:
                 pass
-        else:
+        elif device == "cpu":
             self.device = "cpu"
             self.is_cuda = False
             self.use_half = False
+        else:
+            raise ValueError(f"Неизвестное устройство инференса: {device}")
 
         # Загрузка модели
-        self.model = YOLO(model_path)
-
-        try:
-            self.model.to(self.device)
-        except Exception as e:
-            self.log_signal.emit(f"Model device warning: {e}")
+        model_path = model_path or os.path.join(os.path.dirname(__file__), "best_old_50.pt")
+        self.model = model if model is not None else YOLO(model_path)
+        self.model.to(self.device)
 
         try:
             self.model.fuse()
@@ -261,11 +272,12 @@ class DetectionThread(QThread):
         if self.target_class_ids:
             base_kwargs["classes"] = self.target_class_ids
 
-        # FP16 для CUDA. На GTX 1660 обычно можно оставить включенным.
+        # FP16 для CUDA с автоматическим возвратом к FP32 при ошибке.
         if self.is_cuda and self.use_half:
             try:
                 return self.model.predict(**base_kwargs, half=True)
             except Exception as e:
+                self.use_half = False
                 if self.diagnostic_logs:
                     self.log_signal.emit(f"FP16 недоступен, fallback в FP32: {e}")
 
@@ -319,8 +331,7 @@ class DetectionThread(QThread):
                     "is_weapon": is_weapon,
                 }
             )
-            self.sound_manager.play_alarm()
-            
+
         return detections, weapon_found, weapon_max_conf, detected_set, detected_names
 
     # -------------------------------------------------------------------------
@@ -404,7 +415,9 @@ class DetectionThread(QThread):
         while self._running:
             loop_start = time.perf_counter()
 
-            frame = self.camera_thread.get_last_frame_copy()
+            with self._camera_lock:
+                source_thread = self.camera_thread
+            frame = source_thread.get_last_frame_copy()
 
             if frame is None:
                 self.msleep(20)
@@ -531,3 +544,7 @@ class DetectionThread(QThread):
         self._running = False
         self.quit()
         self.wait()
+
+    def set_camera_thread(self, camera_thread):
+        with self._camera_lock:
+            self.camera_thread = camera_thread

@@ -1,24 +1,10 @@
---index-url https://download.pytorch.org/whl/cu124
---extra-index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cu130
 
-torch==2.4.1
-torchvision==0.19.1
-torchaudio==2.4.1
-ultralytics==8.1.19
-PyQt6==6.9.0
-PyQt6-Qt6==6.9.2
-PyQt6_sip==13.11.1
-opencv-python==4.10.0.84
-numpy==1.26.4
-pillow==10.4.0
-PyYAML==6.0.2
-requests==2.32.3
-scipy==1.14.1
-pandas==2.2.2
-matplotlib==3.9.2
-seaborn==0.13.2
-tqdm==4.66.5
-psutil==6.0.0
-py-cpuinfo==9.0.0
-pygame=2.6.1
-PyQt5==5.15.11
+# Python 3.12; CUDA 13.0 runtime for the RTX 5060 (Blackwell).
+torch==2.14.0+cu130
+torchvision==0.29.0+cu130
+ultralytics==8.4.158
+PyQt6==6.11.0
+opencv-python==4.14.0.94
+numpy==2.5.3
+pygame==2.6.1

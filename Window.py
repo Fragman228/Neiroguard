@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 
 from PyQt6.QtWidgets import QMainWindow, QPlainTextEdit, QVBoxLayout
 from PyQt6.QtGui import QPixmap
@@ -14,11 +15,13 @@ from DateTime import DateTimeThread
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, storage: CameraStorage):
+    def __init__(self, storage: CameraStorage, model, device: str):
         super().__init__()
-        loadUi("detection_window_new.ui", self)
+        loadUi(os.path.join(os.path.dirname(__file__), "detection_window_new.ui"), self)
 
         self.storage = storage
+        self.model = model
+        self.device = device
         self.camera_selector = CameraSelector(self.comboBox)
 
         self.camera_threads = {}
@@ -119,24 +122,23 @@ class MainWindow(QMainWindow):
     def switch_detection_camera(self, camera_id: int):
         print(f"Получена команда на переключение детекции на камеру с ID: {camera_id}")
 
-        if self.current_detection_thread and self.current_detection_thread.isRunning():
-            self.current_detection_thread.stop()
-
         source_camera_thread = self.camera_threads.get(camera_id)
         if not source_camera_thread:
             print(f"Критическая ошибка: не удалось найти поток для камеры с ID {camera_id}!")
             return
 
-        self.current_detection_thread = DetectionThread(
-            source_camera_thread,
-            device="cuda:0",
-            default_conf=self.conf_controller.default_conf
-        )
-
-        self.current_detection_thread.detection_ready.connect(self.update_detection_frame)
-        self.current_detection_thread.log_signal.connect(self.append_log)
-
-        self.current_detection_thread.start()
+        if self.current_detection_thread is None:
+            self.current_detection_thread = DetectionThread(
+                source_camera_thread,
+                model=self.model,
+                device=self.device,
+                default_conf=self.conf_controller.current_conf,
+            )
+            self.current_detection_thread.detection_ready.connect(self.update_detection_frame)
+            self.current_detection_thread.log_signal.connect(self.append_log)
+            self.current_detection_thread.start()
+        else:
+            self.current_detection_thread.set_camera_thread(source_camera_thread)
         print(f"Поток детекции для камеры ID:{camera_id} успешно запущен.")
 
     def update_confidence(self, new_conf: float):
@@ -151,12 +153,7 @@ class MainWindow(QMainWindow):
             self.current_detection_thread.stop()
 
         if hasattr(self, "date_time_thread") and self.date_time_thread.isRunning():
-            stop_method = getattr(self.date_time_thread, "stop", None)
-            if callable(stop_method):
-                stop_method()
-            else:
-                self.date_time_thread.terminate()
-                self.date_time_thread.wait(1000)
+            self.date_time_thread.stop()
 
         for thread in self.camera_threads.values():
             thread.stop()
